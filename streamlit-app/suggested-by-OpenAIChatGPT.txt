@@ -1,0 +1,59 @@
+import streamlit as st
+import pandas as pd
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
+from Bio import Entrez
+
+# Set up email credentials
+email = "your_email@gmail.com"
+password = "your_email_password"
+
+# Set up Entrez module
+Entrez.email = email
+
+# Define function to retrieve articles from PubMed
+def retrieve_articles(query):
+    handle = Entrez.esearch(db="pubmed", term=query)
+    record = Entrez.read(handle)
+    ids = record["IdList"]
+    articles = []
+    for id in ids:
+        article = Entrez.efetch(db="pubmed", id=id, retmode="text", rettype="medline").read()
+        articles.append(article)
+    return articles
+
+# Define function to email results to user
+def send_email(results_df, recipient):
+    # Set up email message
+    message = MIMEMultipart()
+    message["From"] = email
+    message["To"] = recipient
+    message["Subject"] = "PubMed search results"
+    # Add results dataframe as attachment
+    csv = results_df.to_csv(index=False)
+    attachment = MIMEApplication(csv.encode(), _subtype="csv")
+    attachment.add_header("Content-Disposition", "attachment", filename="results.csv")
+    message.attach(attachment)
+    # Send email
+    with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
+        smtp.ehlo()
+        smtp.starttls()
+        smtp.ehlo()
+        smtp.login(email, password)
+        smtp.send_message(message)
+
+# Set up Streamlit app
+st.title("PubMed Search")
+query = st.text_input("Enter search terms:")
+recipient = st.text_input("Enter your email address:")
+if st.button("Search"):
+    # Retrieve articles from PubMed and display in dataframe
+    articles = retrieve_articles(query)
+    results_df = pd.DataFrame(articles, columns=["article"])
+    st.write(results_df)
+    # Send results to user's email
+    if recipient:
+        send_email(results_df, recipient)
+        st.success("Results sent to email!")
